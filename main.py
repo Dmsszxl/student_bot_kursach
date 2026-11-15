@@ -2,7 +2,16 @@ import os
 
 from dotenv import load_dotenv
 from telegram import ReplyKeyboardMarkup, Update
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
+
+from math_lessons import open_math_menu, show_math_page
 
 
 SUBJECTS = ("Программирование", "Математика")
@@ -19,6 +28,10 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def select_subject(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
+    if message.text == "Математика":
+        await open_math_menu(message)
+        return
+
     await message.reply_text(f"Ты выбрал раздел «{message.text}». Здесь появятся уроки.")
 
 
@@ -32,7 +45,8 @@ def main() -> None:
     new_messages = filters.UpdateType.MESSAGE
     app.add_handler(CommandHandler("start", show_menu, filters=new_messages))
     app.add_handler(MessageHandler(new_messages & filters.Text(SUBJECTS), select_subject))
-    app.run_polling(allowed_updates=["message"])
+    app.add_handler(CallbackQueryHandler(show_math_page, pattern=r"^math:"))
+    app.run_polling(allowed_updates=["message", "callback_query"])
 
 
 if __name__ == "__main__":

@@ -1,0 +1,88 @@
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
+from telegram.ext import ContextTypes
+
+
+INDUCTION = "Метод математической индукции"
+TO_TOPIC = [("К теме", "induction")]
+PAGES = {
+    "menu": (
+        "Математика. Выбери дисциплину.",
+        [[("Математический анализ", "calculus")]],
+    ),
+    "calculus": (
+        "Математический анализ. Выбери тему.",
+        [[(INDUCTION, "induction")], [("Назад", "menu")]],
+    ),
+    "induction": (
+        INDUCTION,
+        [
+            [("Справка", "theory"), ("Пример", "example")],
+            [("Решить задачу", "exercise")],
+            [("Назад", "calculus")],
+        ],
+    ),
+    "theory": (
+        "Метод математической индукции\n\n"
+        "Пусть P(n) — утверждение, которое нужно доказать для всех целых n ≥ n₀.\n\n"
+        "1. База. Проверь P(n₀).\n"
+        "2. Переход. Возьми произвольное k ≥ n₀ и предположи, что P(k) верно. "
+        "Из этого предположения выведи P(k + 1).\n\n"
+        "База запускает цепочку, а переход позволяет пройти от каждого числа к следующему.",
+        [TO_TOPIC],
+    ),
+    "example": (
+        "Пример. Сумма первых n натуральных чисел\n\n"
+        "Докажем, что 1 + 2 + … + n = n(n + 1)/2 для всех n ≥ 1.\n\n"
+        "База. При n = 1 обе части равны 1.\n\n"
+        "Предположение. Пусть 1 + 2 + … + k = k(k + 1)/2 для некоторого k ≥ 1.\n\n"
+        "Переход. Прибавим к сумме следующее слагаемое, k + 1. "
+        "По предположению получаем:\n"
+        "k(k + 1)/2 + (k + 1)\n"
+        "= (k + 1)(k + 2)/2.\n\n"
+        "Это формула для n = k + 1. База и переход доказаны.",
+        [TO_TOPIC],
+    ),
+    "exercise": (
+        "Задача. Сумма первых n нечётных чисел\n\n"
+        "Докажем, что 1 + 3 + … + (2n − 1) = n² для всех n ≥ 1. "
+        "При n = 1 обе части равны 1.\n\n"
+        "Предположим, что сумма первых k нечётных чисел равна k². "
+        "Какое слагаемое нужно добавить, чтобы получить сумму первых k + 1 чисел?",
+        [
+            [("2k − 1", "wrong"), ("2k + 1", "correct"), ("2k + 3", "wrong")],
+            TO_TOPIC,
+        ],
+    ),
+    "wrong": (
+        "Пока неверно. Запиши общее выражение для n-го нечётного числа, 2n − 1, "
+        "и подставь вместо n число k + 1.",
+        [[("Попробовать ещё раз", "exercise")], TO_TOPIC],
+    ),
+    "correct": (
+        "Верно! Следующее нечётное число равно 2(k + 1) − 1 = 2k + 1.\n\n"
+        "Прибавляем его к сумме первых k чисел и получаем "
+        "k² + 2k + 1 = (k + 1)². Так мы доказали переход.",
+        [TO_TOPIC],
+    ),
+}
+
+
+def math_keyboard(rows: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(label, callback_data=f"math:{page}") for label, page in row]
+        for row in rows
+    ])
+
+
+async def open_math_menu(message: Message) -> None:
+    text, rows = PAGES["menu"]
+    await message.reply_text(text, reply_markup=math_keyboard(rows))
+
+
+async def show_math_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    page = query.data.removeprefix("math:")
+    if page in PAGES:
+        text, rows = PAGES[page]
+        await query.edit_message_text(text, reply_markup=math_keyboard(rows))
