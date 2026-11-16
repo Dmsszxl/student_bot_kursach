@@ -1,10 +1,6 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
-from telegram.ext import ContextTypes
-
-
 INDUCTION = "Метод математической индукции"
 TO_TOPIC = [("К теме", "induction")]
-PAGES = {
+MATH_PAGES = {
     "menu": (
         "Математика. Выбери дисциплину.",
         [[("Математический анализ", "calculus")]],
@@ -56,7 +52,7 @@ PAGES = {
     "wrong": (
         "Пока неверно. Запиши общее выражение для n-го нечётного числа, 2n − 1, "
         "и подставь вместо n число k + 1.",
-        [[("Попробовать ещё раз", "exercise")], TO_TOPIC],
+        [[("Объясни подробнее", "ai")], [("Попробовать ещё раз", "exercise")], TO_TOPIC],
     ),
     "correct": (
         "Верно! Следующее нечётное число равно 2(k + 1) − 1 = 2k + 1.\n\n"
@@ -65,24 +61,3 @@ PAGES = {
         [TO_TOPIC],
     ),
 }
-
-
-def math_keyboard(rows: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton(label, callback_data=f"math:{page}") for label, page in row]
-        for row in rows
-    ])
-
-
-async def open_math_menu(message: Message) -> None:
-    text, rows = PAGES["menu"]
-    await message.reply_text(text, reply_markup=math_keyboard(rows))
-
-
-async def show_math_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    page = query.data.removeprefix("math:")
-    if page in PAGES:
-        text, rows = PAGES[page]
-        await query.edit_message_text(text, reply_markup=math_keyboard(rows))
