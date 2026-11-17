@@ -8,7 +8,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, ReplyK
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
-from cpp_lessons import EXERCISE_CODE
+from cpp_lessons import CPP_EXERCISES, EXERCISE_CODE
+from math_lessons import MATH_EXERCISES
 
 
 GROQ_MODEL = "openai/gpt-oss-120b"
@@ -72,6 +73,16 @@ def close_ai_chat(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> bool:
     return context.user_data.get("ai_chats", {}).pop(chat_id, None) is not None
 
 
+def exercise_context(subject: str, exercise_id: str) -> str:
+    if not exercise_id:
+        return EXERCISES[subject]
+    exercises = CPP_EXERCISES if subject == "cpp" else MATH_EXERCISES
+    exercise = exercises.get(exercise_id)
+    if exercise is None:
+        return ""
+    return "\n\n".join(part for part in (exercise.question, exercise.code, exercise.hint) if part)
+
+
 async def ask_groq(api_key: str, messages: list[ChatCompletionMessageParam]) -> str:
     try:
         async with AsyncOpenAI(
@@ -111,13 +122,18 @@ async def open_ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if title != HINT_TITLE or not hint:
             await query.answer("Открой подсказку ещё раз.")
             return
+        _, _, lesson_key = query.data.partition(":")
+        subject, _, exercise_id = lesson_key.partition(":")
+        lesson_context = exercise_context(subject, exercise_id)
+        if not lesson_context:
+            await query.answer("Открой задачу ещё раз.")
+            return
         await query.answer()
-        subject = query.data.split(":", 1)[1]
         messages = [
             {"role": "system", "content": (
                 f"{TUTOR_PROMPT} Ответь на конкретное уточнение, не продолжая решение задачи "
                 "за студента. Если студент просит готовый ответ, дай следующий шаг.\n\n"
-                f"{EXERCISES[subject]}"
+                f"{lesson_context}"
             )},
             {"role": "user", "content": "Дай подсказку по этой задаче."},
             {"role": "assistant", "content": hint},
@@ -172,17 +188,24 @@ async def show_ai_hint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await query.answer("Подсказка уже готовится.")
         return
 
+    subject, _, action = query.data.partition(":")
+    exercise_id = "" if action == "ai" else action.removesuffix("-ai")
+    prompt = HINT_REQUESTS.get(query.data) or exercise_context(subject, exercise_id)
+    if not prompt:
+        await query.answer("Открой задачу ещё раз.")
+        return
+
     context.user_data["waiting_for_hint"] = True
     try:
         await query.answer("Запрашиваю подсказку…")
         hint = await ask_groq(api_key, [
             {"role": "system", "content": HINT_PROMPT},
-            {"role": "user", "content": HINT_REQUESTS[query.data]},
+            {"role": "user", "content": prompt},
         ])
         if hint:
-            subject = query.data.split(":", 1)[0]
+            follow_up = f"ask:{subject}:{exercise_id}" if exercise_id else f"ask:{subject}"
             keyboard = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Задать вопрос по подсказке", callback_data=f"ask:{subject}"),
+                InlineKeyboardButton("Задать вопрос по подсказке", callback_data=follow_up),
             ]])
             await query.message.reply_text(f"{HINT_TITLE}\n\n{hint}", reply_markup=keyboard)
         else:
