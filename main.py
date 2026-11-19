@@ -64,13 +64,13 @@ def format_lesson(text: str, subject: str) -> str:
     return f"<b>{title}</b>{separator}{body}"
 
 
-def close_numeric_exercise(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
-    context.user_data.get("numeric_exercises", {}).pop(chat_id, None)
+def close_exercise(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
+    context.user_data.get("active_exercises", {}).pop(chat_id, None)
 
 
 async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     close_ai_chat(context, update.message.chat_id)
-    close_numeric_exercise(context, update.message.chat_id)
+    close_exercise(context, update.message.chat_id)
     await update.message.reply_text(
         "<b>Привет! Что хочешь разобрать сегодня?</b>\n\n"
         "Выбери предмет или задай вопрос ИИ.",
@@ -81,7 +81,7 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def select_subject(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
-    close_numeric_exercise(context, message.chat_id)
+    close_exercise(context, message.chat_id)
     if close_ai_chat(context, message.chat_id):
         await message.reply_text("Ты вернулся к урокам.", reply_markup=main_menu)
     subject = SUBJECTS[message.text]
@@ -100,12 +100,12 @@ async def show_lesson_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     chat_id = update.effective_chat.id
-    close_numeric_exercise(context, chat_id)
+    close_exercise(context, chat_id)
     exercise = LESSON_EXERCISES[subject].get(page)
     if exercise is not None and not exercise.choices:
         if close_ai_chat(context, chat_id):
             await query.message.reply_text("Ты вернулся к задаче.", reply_markup=main_menu)
-        context.user_data.setdefault("numeric_exercises", {})[chat_id] = (subject, page)
+        context.user_data.setdefault("active_exercises", {})[chat_id] = (subject, page)
     text, rows = pages[page]
     await query.edit_message_text(
         format_lesson(text, subject),
@@ -115,29 +115,39 @@ async def show_lesson_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def start_ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    close_numeric_exercise(context, update.effective_chat.id)
+    close_exercise(context, update.effective_chat.id)
     await open_ai_chat(update, context)
 
 
 async def answer_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
-    active = context.user_data.get("numeric_exercises", {}).get(message.chat_id)
+    active = context.user_data.get("active_exercises", {}).get(message.chat_id)
     if active is None:
         await answer_question(update, context)
         return
 
-    text = message.text.strip().replace("−", "-").replace(",", ".")
-    try:
-        number = Fraction("".join(text.split())) if NUMBER_FORMAT.fullmatch(text) else None
-    except (ValueError, ZeroDivisionError):
-        number = None
-    if number is None:
-        await message.reply_text("Напиши ответ числом, например 2, 0,5 или 1/2.")
-        return
-
-    close_numeric_exercise(context, message.chat_id)
     subject, page = active
-    correct = number == LESSON_EXERCISES[subject][page].answer
+    exercise = LESSON_EXERCISES[subject][page]
+    text = message.text.strip().replace("−", "-")
+    if isinstance(exercise.answer, str):
+        lines = [line.strip() for line in text.splitlines()]
+        if not lines:
+            await message.reply_text(exercise.input_instruction)
+            return
+        correct = lines == exercise.answer.splitlines()
+    else:
+        text = text.replace(",", ".")
+        try:
+            number = Fraction("".join(text.split())) if NUMBER_FORMAT.fullmatch(text) else None
+        except (ValueError, ZeroDivisionError):
+            number = None
+        if number is None:
+            await message.reply_text(exercise.input_instruction)
+            return
+        correct = number == exercise.answer
+
+    if correct:
+        close_exercise(context, message.chat_id)
     result = f"{page}-right" if correct else f"{page}-wrong"
     text, rows = LESSON_PAGES[subject][result]
     await message.reply_text(

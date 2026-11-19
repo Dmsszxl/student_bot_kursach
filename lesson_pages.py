@@ -15,6 +15,14 @@ class Exercise:
     choices: tuple[str, ...] = ()
     code: str = ""
 
+    @property
+    def input_instruction(self) -> str:
+        if not isinstance(self.answer, str):
+            return "Отправь число. Дробь можно записать как 3/4."
+        if "\n" in self.answer:
+            return "Введи вывод одним сообщением, сохранив переносы строк."
+        return "Введи вывод программы одной строкой."
+
 
 @dataclass(frozen=True)
 class Lesson:
@@ -68,7 +76,7 @@ def add_lessons(
                     for choice in exercise.choices
                 ]
             else:
-                question += "\n\nОтправь число сообщением. Дробь можно записать как 3/4."
+                question += f"\n\n{exercise.input_instruction}"
                 answers = []
 
             task_back = [("К задачам", f"{topic}-tasks")]
@@ -76,11 +84,14 @@ def add_lessons(
                 f"Задача {number}. {title}\n\n{question}",
                 [answers, task_back] if answers else [task_back],
             )
+            retry = "Попробовать ещё раз" if exercise.choices else "Открыть условие"
+            if not exercise.choices:
+                hint += f"\n\n{exercise.input_instruction}"
             pages[f"{exercise_id}-wrong"] = (
                 f"Пока неверно. {hint}",
                 [
                     [("Объясни подробнее", f"{exercise_id}-ai")],
-                    [("Попробовать ещё раз", exercise_id)],
+                    [(retry, exercise_id)],
                     task_back,
                 ],
             )
