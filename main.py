@@ -1,6 +1,7 @@
 import os
 import re
 from fractions import Fraction
+from html import escape
 
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update
@@ -25,18 +26,42 @@ from cpp_lessons import CPP_EXERCISES, CPP_PAGES
 from math_lessons import MATH_EXERCISES, MATH_PAGES
 
 
-SUBJECTS = {"Программирование": "cpp", "Математика": "math"}
+SUBJECT_BUTTONS = {"💻 Программирование": "cpp", "📐 Математика": "math"}
+SUBJECTS = SUBJECT_BUTTONS | {"Программирование": "cpp", "Математика": "math"}
+AI_BUTTON = f"💬 {ASK_AI}"
 LESSON_PAGES = {"cpp": CPP_PAGES, "math": MATH_PAGES}
 LESSON_EXERCISES = {"cpp": CPP_EXERCISES, "math": MATH_EXERCISES}
 NUMBER_FORMAT = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]+)?|[0-9]+\s*/\s*[0-9]+)")
-main_menu = ReplyKeyboardMarkup([list(SUBJECTS), [ASK_AI]], resize_keyboard=True)
+main_menu = ReplyKeyboardMarkup([list(SUBJECT_BUTTONS), [AI_BUTTON]], resize_keyboard=True)
+LESSON_BUTTONS = {
+    "Справка": "📖 Справка",
+    "Пример": "📝 Пример",
+    "Решить задачу": "✏️ Решить задачу",
+    "Объясни подробнее": "💬 Объясни подробнее",
+    "Назад": "← Назад",
+    "К теме": "← К теме",
+    "К задачам": "← К задачам",
+}
 
 
 def lesson_keyboard(subject: str, rows: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(label, callback_data=f"{subject}:{page}") for label, page in row]
+        [
+            InlineKeyboardButton(LESSON_BUTTONS.get(label, label), callback_data=f"{subject}:{page}")
+            for label, page in row
+        ]
         for row in rows
     ])
+
+
+def format_lesson(text: str, subject: str) -> str:
+    if subject == "math":
+        text = escape(text)
+    for status, heading in (("Верно!", "✅ Верно!"), ("Пока неверно.", "💡 Пока неверно")):
+        if text.startswith(f"{status} "):
+            return f"<b>{heading}</b>\n\n{text.removeprefix(status).lstrip()}"
+    title, separator, body = text.partition("\n\n")
+    return f"<b>{title}</b>{separator}{body}"
 
 
 def close_numeric_exercise(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
@@ -47,9 +72,10 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     close_ai_chat(context, update.message.chat_id)
     close_numeric_exercise(context, update.message.chat_id)
     await update.message.reply_text(
-        "Привет! Я помогу тебе практиковаться в программировании и математике. "
+        "<b>Привет! Что хочешь разобрать сегодня?</b>\n\n"
         "Выбери предмет или задай вопрос ИИ.",
         reply_markup=main_menu,
+        parse_mode="HTML",
     )
 
 
@@ -60,7 +86,9 @@ async def select_subject(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await message.reply_text("Ты вернулся к урокам.", reply_markup=main_menu)
     subject = SUBJECTS[message.text]
     text, rows = LESSON_PAGES[subject]["menu"]
-    await message.reply_text(text, reply_markup=lesson_keyboard(subject, rows))
+    await message.reply_text(
+        format_lesson(text, subject), reply_markup=lesson_keyboard(subject, rows), parse_mode="HTML"
+    )
 
 
 async def show_lesson_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -80,9 +108,9 @@ async def show_lesson_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         context.user_data.setdefault("numeric_exercises", {})[chat_id] = (subject, page)
     text, rows = pages[page]
     await query.edit_message_text(
-        text,
+        format_lesson(text, subject),
         reply_markup=lesson_keyboard(subject, rows),
-        parse_mode="HTML" if subject == "cpp" else None,
+        parse_mode="HTML",
     )
 
 
@@ -112,7 +140,9 @@ async def answer_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     correct = number == LESSON_EXERCISES[subject][page].answer
     result = f"{page}-right" if correct else f"{page}-wrong"
     text, rows = LESSON_PAGES[subject][result]
-    await message.reply_text(text, reply_markup=lesson_keyboard(subject, rows))
+    await message.reply_text(
+        format_lesson(text, subject), reply_markup=lesson_keyboard(subject, rows), parse_mode="HTML"
+    )
 
 
 def main() -> None:
@@ -125,7 +155,7 @@ def main() -> None:
     new_messages = filters.UpdateType.MESSAGE
     app.add_handler(CommandHandler("start", show_menu, filters=new_messages))
     app.add_handler(MessageHandler(new_messages & filters.Text([EXIT_AI]), show_menu))
-    app.add_handler(MessageHandler(new_messages & filters.Text([ASK_AI]), start_ai_chat))
+    app.add_handler(MessageHandler(new_messages & filters.Text([ASK_AI, AI_BUTTON]), start_ai_chat))
     app.add_handler(MessageHandler(new_messages & filters.Text(list(SUBJECTS)), select_subject))
     app.add_handler(
         CallbackQueryHandler(show_ai_hint, pattern=r"^(cpp|math):(?:[a-z-]+-q[0-9]+-)?ai$", block=False)
