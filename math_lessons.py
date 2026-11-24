@@ -433,7 +433,7 @@ ALGEBRA_LESSONS = {
     "det-three": Lesson(
         title="Определитель 3×3 по первой строке",
         theory="Для каждого элемента первой строки вычеркни его строку и столбец. Определитель оставшейся матрицы 2×2 называют минором этого элемента. Умножь каждый элемент на его минор и сложи результаты со знаками плюс, минус, плюс.",
-        example="Для матрицы [[2, 1, 0], [3, 4, 1], [0, 2, 1]] минор числа 2 равен 4·1 − 1·2 = 2. Минор числа 1 из первой строки равен 3·1 − 1·0 = 3. Третий элемент нулевой. Получаем определитель 2·2 − 1·3 = 1.",
+        example="Для матрицы [[2, 1, 0], [3, 4, 1], [0, 2, 1]] Минор числа 2 равен 4·1 − 1·2 = 2. Минор числа 1 из первой строки равен 3·1 − 1·0 = 3. Третий элемент нулевой. Получаем определитель 2·2 − 1·3 = 1.",
         exercises=(
             Exercise(
                 question="Найди определитель матрицы [[0, 2, 0], [3, 1, 4], [1, 0, 2]].",
@@ -535,4 +535,63 @@ MATH_PAGES["algebra"] = (
 MATH_EXERCISES = {
     **add_lessons(MATH_PAGES, CALCULUS_LESSONS, "calculus"),
     **add_lessons(MATH_PAGES, ALGEBRA_LESSONS, "algebra"),
+}
+
+# Текст уроков остаётся запасным вариантом, если Telegram отклонит формулы.
+MATH_PAGES["side-limits-example"][1].insert(0, [("Показать график", "side-limits-graph")])
+MATH_PAGES["vector-ops-example"][1].insert(0, [("Показать сложение векторов", "vector-ops-graph")])
+
+MATH_FORMULAS = {
+    "root-limit-example": {
+        "При x → 4 найдём предел (√x − 2)/(x − 4).": (
+            "Найдём предел.",
+            r"\lim_{x\to 4}\frac{\sqrt{x}-2}{x-4}",
+        ),
+        "Получаем 1/(√x + 2), и его предел равен 1/4.": (
+            "В оставшуюся дробь можно подставить x = 4.",
+            r"\lim_{x\to 4}\frac{1}{\sqrt{x}+2}=\frac14",
+        ),
+    },
+    "root-limit-q1": {
+        "Найди предел (√(1 + x) − 1)/x при x → 0.": (
+            "Найди предел.",
+            r"\lim_{x\to 0}\frac{\sqrt{1+x}-1}{x}",
+        ),
+    },
+    "root-limit-q2": {
+        "Найди предел (3 − √x)/(x − 9) при x → 9.": (
+            "Найди предел.",
+            r"\lim_{x\to 9}\frac{3-\sqrt{x}}{x-9}",
+        ),
+    },
+    "root-limit-q1-right": {
+        CALCULUS_LESSONS["root-limit"].exercises[0].explanation: (
+            "Умножаем числитель и знаменатель на сопряжённое. При x ≠ 0 сокращаем x. После этого при x → 0 получаем 1/2.",
+            r"\frac{\sqrt{1+x}-1}{x}=\frac{1}{\sqrt{1+x}+1}",
+        ),
+    },
+    "root-limit-q2-right": {
+        CALCULUS_LESSONS["root-limit"].exercises[1].explanation: (
+            "Умножаем числитель и знаменатель на сопряжённое. При x ≠ 9 используем 9 − x = −(x − 9). При x → 9 получаем −1/6.",
+            r"\frac{3-\sqrt{x}}{x-9}=-\frac{1}{3+\sqrt{x}}",
+        ),
+    },
+    "det-three-example": {
+        "Для матрицы [[2, 1, 0], [3, 4, 1], [0, 2, 1]]": (
+            "Разложим определитель по первой строке.",
+            r"\begin{vmatrix}2&1&0\\3&4&1\\0&2&1\end{vmatrix}",
+        ),
+    },
+    "det-three-q1": {
+        ALGEBRA_LESSONS["det-three"].exercises[0].question: (
+            "Вычисли определитель.",
+            r"\begin{vmatrix}0&2&0\\3&1&4\\1&0&2\end{vmatrix}",
+        ),
+    },
+    "det-three-q2": {
+        ALGEBRA_LESSONS["det-three"].exercises[1].question: (
+            "Вычисли определитель.",
+            r"\begin{vmatrix}1&2&3\\0&1&2\\1&0&1\end{vmatrix}",
+        ),
+    },
 }

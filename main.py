@@ -2,6 +2,7 @@ import os
 import re
 from fractions import Fraction
 from html import escape
+from pathlib import Path
 
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update
@@ -23,7 +24,8 @@ from ai_tutor import (
     show_ai_hint,
 )
 from cpp_lessons import CPP_EXERCISES, CPP_PAGES
-from math_lessons import MATH_EXERCISES, MATH_PAGES
+from math_lessons import MATH_EXERCISES, MATH_FORMULAS, MATH_PAGES
+from rich_math import send_math
 
 
 SUBJECT_BUTTONS = {"💻 Программирование": "cpp", "📐 Математика": "math"}
@@ -32,6 +34,10 @@ AI_BUTTON = f"💬 {ASK_AI}"
 LESSON_PAGES = {"cpp": CPP_PAGES, "math": MATH_PAGES}
 LESSON_EXERCISES = {"cpp": CPP_EXERCISES, "math": MATH_EXERCISES}
 NUMBER_FORMAT = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]+)?|[0-9]+\s*/\s*[0-9]+)")
+MATH_DIAGRAMS = {
+    "side-limits-graph": ("side-limits.png", "Слева от x = 2 график подходит к 3, справа — к 5."),
+    "vector-ops-graph": ("vector-sum.png", "Приложи начало b к концу a. Вектор a + b идёт от начала a до конца b."),
+}
 main_menu = ReplyKeyboardMarkup([list(SUBJECT_BUTTONS), [AI_BUTTON]], resize_keyboard=True)
 LESSON_BUTTONS = {
     "Справка": "📖 Справка",
@@ -62,6 +68,14 @@ def format_lesson(text: str, subject: str) -> str:
             return f"<b>{heading}</b>\n\n{text.removeprefix(status).lstrip()}"
     title, separator, body = text.partition("\n\n")
     return f"<b>{title}</b>{separator}{body}"
+
+
+def format_math_page(text: str, page: str) -> str:
+    html = "<p>" + text.replace("\n\n", "</p><p>") + "</p>"
+    for original, (intro, latex) in MATH_FORMULAS[page].items():
+        formula = f"<tg-math-block>{escape(latex)}</tg-math-block>"
+        html = html.replace(escape(original), f"{escape(intro)}</p>{formula}<p>")
+    return html.replace("<p></p>", "")
 
 
 def close_exercise(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
@@ -95,6 +109,11 @@ async def show_lesson_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     query = update.callback_query
     await query.answer()
     subject, page = query.data.split(":", 1)
+    if subject == "math" and page in MATH_DIAGRAMS:
+        filename, caption = MATH_DIAGRAMS[page]
+        with (Path(__file__).with_name("assets") / filename).open("rb") as photo:
+            await query.message.reply_photo(photo, caption=caption)
+        return
     pages = LESSON_PAGES[subject]
     if page not in pages:
         return
@@ -107,11 +126,12 @@ async def show_lesson_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await query.message.reply_text("Ты вернулся к задаче.", reply_markup=main_menu)
         context.user_data.setdefault("active_exercises", {})[chat_id] = (subject, page)
     text, rows = pages[page]
-    await query.edit_message_text(
-        format_lesson(text, subject),
-        reply_markup=lesson_keyboard(subject, rows),
-        parse_mode="HTML",
-    )
+    text = format_lesson(text, subject)
+    keyboard = lesson_keyboard(subject, rows)
+    if subject == "math" and page in MATH_FORMULAS:
+        if await send_math(query.message, format_math_page(text, page), keyboard=keyboard, edit=True):
+            return
+    await query.edit_message_text(text, reply_markup=keyboard, parse_mode="HTML")
 
 
 async def start_ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -150,9 +170,12 @@ async def answer_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         close_exercise(context, message.chat_id)
     result = f"{page}-right" if correct else f"{page}-wrong"
     text, rows = LESSON_PAGES[subject][result]
-    await message.reply_text(
-        format_lesson(text, subject), reply_markup=lesson_keyboard(subject, rows), parse_mode="HTML"
-    )
+    text = format_lesson(text, subject)
+    keyboard = lesson_keyboard(subject, rows)
+    if subject == "math" and result in MATH_FORMULAS:
+        if await send_math(message, format_math_page(text, result), keyboard=keyboard):
+            return
+    await message.reply_text(text, reply_markup=keyboard, parse_mode="HTML")
 
 
 def main() -> None:

@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 
 from cpp_lessons import CPP_EXERCISES, EXERCISE_CODE
 from math_lessons import MATH_EXERCISES
+from rich_math import ai_math_html, ai_math_plain, send_math
 
 
 GROQ_MODEL = "openai/gpt-oss-120b"
@@ -21,8 +22,10 @@ ai_keyboard = ReplyKeyboardMarkup([[EXIT_AI]], resize_keyboard=True)
 TUTOR_PROMPT = (
     "Ты учебный помощник первокурсника. Отвечай на русском и обращайся на ты. "
     "Начинай сразу с ответа на вопрос и объясняй понятным языком. "
-    "Ответ будет показан в обычном сообщении Telegram. Пиши без HTML, Markdown и LaTeX. "
-    "Формулы записывай в одну строку, например (a + b)/2. Для кода используй отступы "
+    "Пиши обычным текстом без HTML и Markdown. Простые выражения записывай в строку. "
+    r"Если нужен LaTeX, обрамляй каждую формулу: внутри текста используй \(...\), "
+    r"для отдельной формулы используй \[...\]. Всегда закрывай разделители. "
+    "Для кода используй отступы "
     "и переносы строк, без обратных кавычек."
 )
 HINT_PROMPT = (
@@ -119,9 +122,9 @@ async def open_ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     query = update.callback_query
     if query:
         title, _, hint = (message.text or "").partition("\n\n")
-        if title != HINT_TITLE or not hint:
-            await query.answer("Открой подсказку ещё раз.")
-            return
+        if title != HINT_TITLE:
+            hints = context.user_data.get("rich_hints", {})
+            hint = hints.get((message.chat_id, message.message_id), "")
         _, _, lesson_key = query.data.partition(":")
         subject, _, exercise_id = lesson_key.partition(":")
         lesson_context = exercise_context(subject, exercise_id)
@@ -135,9 +138,12 @@ async def open_ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 "за студента. Если студент просит готовый ответ, дай следующий шаг.\n\n"
                 f"{lesson_context}"
             )},
-            {"role": "user", "content": "Дай подсказку по этой задаче."},
-            {"role": "assistant", "content": hint},
         ]
+        if hint:
+            messages.extend([
+                {"role": "user", "content": "Дай подсказку по этой задаче."},
+                {"role": "assistant", "content": hint},
+            ])
         invite = "Напиши, что осталось непонятным в подсказке."
 
     if not os.getenv("GROQ_API_KEY", "").strip():
@@ -172,7 +178,9 @@ async def answer_question(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if not answer:
             await message.reply_text("ИИ сейчас недоступен. Попробуй отправить вопрос ещё раз.")
             return
-        await message.reply_text(answer)
+        html = ai_math_html(answer)
+        if not html or not await send_math(message, html):
+            await message.reply_text(ai_math_plain(answer))
         chat.history = [*chat.history, question_message, {"role": "assistant", "content": answer}][-6:]
     finally:
         chat.waiting = False
@@ -207,7 +215,19 @@ async def show_ai_hint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton("Задать вопрос по подсказке", callback_data=follow_up),
             ]])
-            await query.message.reply_text(f"{HINT_TITLE}\n\n{hint}", reply_markup=keyboard)
+            html = ai_math_html(hint)
+            sent = None
+            if html:
+                sent = await send_math(query.message, f"<p><b>{HINT_TITLE}</b></p>{html}", keyboard=keyboard)
+            if sent:
+                hints = context.user_data.setdefault("rich_hints", {})
+                hints[(query.message.chat_id, sent["message_id"])] = hint
+                if len(hints) > 20:
+                    del hints[next(iter(hints))]
+            else:
+                await query.message.reply_text(
+                    f"{HINT_TITLE}\n\n{ai_math_plain(hint)}", reply_markup=keyboard
+                )
         else:
             await query.message.reply_text(
                 "ИИ сейчас недоступен. Можно попробовать ещё раз или использовать подсказку в задаче."

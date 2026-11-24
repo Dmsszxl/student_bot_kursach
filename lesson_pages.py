@@ -95,7 +95,10 @@ def add_lessons(
                     task_back,
                 ],
             )
-            pages[f"{exercise_id}-right"] = (f"Верно! {explanation}", [task_back, back])
+            result_buttons = [task_back, back]
+            if number < len(lesson.exercises):
+                result_buttons.insert(0, [("Следующая задача", f"{topic}-q{number + 1}")])
+            pages[f"{exercise_id}-right"] = (f"Верно! {explanation}", result_buttons)
 
         pages[f"{topic}-tasks"] = (f"{title}. Выбери задачу.", [*task_buttons, back])
 
